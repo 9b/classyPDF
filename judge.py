@@ -1,78 +1,93 @@
-__description__ = 'Analyzes PDF files and classifies them based on features present'
+__description__ = \
+    'Analyzes PDF files and classifies them based on features present'
 __author__ = 'Brandon Dixon'
 __version__ = '1.0'
 __date__ = '2012/04/28'
 
-import Orange
 import math
 import os
-from classyPDF import *
-from peepdf_classy.bsdPDFCore import PDFParser
+import os.path
 import optparse
 
-mal = Orange.data.Table("data/complete.tab")
-learner = Orange.classification.knn.kNNLearner()
-classifier = learner(mal)
+import Orange
 
-def decision(d):
+from itertools import ifilter
+from peepdf_classy.bsdPDFCore import PDFParser
+from classyPDF import FullMetalExtractor
+
+
+MALWARE_DATA = Orange.data.Table("data/complete.tab")
+_learner = Orange.classification.knn.kNNLearner()
+classifier = _learner(MALWARE_DATA)
+
+
+def decision(data):
+    '''make a decision for the given dataset d'''
+
     c = []
+    # probabilities for being good, bad or targeted
     g = ""
     b = ""
     t = ""
 
     try:
-        tmp = Orange.data.Instance(mal.domain,d)
-        c = classifier(tmp,Orange.classification.Classifier.GetBoth)
+        tmp = Orange.data.Instance(MALWARE_DATA.domain, data)
+        c = classifier(tmp, Orange.classification.Classifier.GetBoth)
         g = int(math.ceil(c[1][0] * 100))
         b = int(c[1][1] * 100)
         t = int(c[1][2] * 100)
     except Exception, ex:
-        print d
+        print data
         print ex
         c.append(666)
 
     if c[0] == 0:
-        des = "non-malicious\t(G:{0}%\tB:{1}%\tT:{2}%)".format(g,b,t)
+        des = "non-malicious"
     elif c[0] == 1:
-        des = "malicious\t\t(G:{0}%\tB:{1}%\tT:{2}%)".format(g,b,t)
+        des = "malicious\t"
     elif c[0] == 2:
-        des = "targeted\t\t(G:{0}%\tB:{1}%\tT:{2}%)".format(g,b,t)
+        des = "targeted\t"
     else:
-        des = "failed"
+        return "failed"
 
-    return des
-    
+    return "{0}\t(G:{1:3}%\tB:{2:3}%\tT:{3:3}%)".format(des, g, b, t)
+
+
 def handle_file(f):
     pdfParser = PDFParser()
-    ret,pdf = pdfParser.parse(f, True, False)
-    obj = FullMetalExtractor(pdf,"_")
+    ret, pdf = pdfParser.parse(f, True, False)
+    obj = FullMetalExtractor(pdf, "_")
     tab = obj.getTab().split("\t")
-    des = decision(tab)
-    return des
-    
+    return decision(tab)
+
+
 def main():
-    oParser = optparse.OptionParser(usage='usage: %prog [options]\n' + __description__, version='%prog ' + __version__)
-    oParser.add_option('-f', '--file', default='', type='string', help='file to build an object from')
-    oParser.add_option('-d', '--dir', default='', type='string', help='dir to build an object from')
-    oParser.add_option('-r', '--report', default='', type='string', help='create basic report')
+    oParser = optparse.OptionParser(usage='usage: %prog [options]\n' +
+                                    __description__, version='%prog ' +
+                                    __version__)
+    oParser.add_option('-f', '--file', default='', type='string',
+                       help='file to build an object from')
+    oParser.add_option('-d', '--dir', default='', type='string',
+                       help='dir to build an object from')
+    oParser.add_option('-r', '--report', default='', type='string',
+                       help='create basic report')
     (options, args) = oParser.parse_args()
-    
+
     if options.file:
-        decision = handle_file(options.file)
-        print options.file + " : " + decision
+        result = handle_file(options.file)
+        print options.file + " : " + result
     elif options.dir:
-        files = []
         pdfs = []
-        dirlist = os.listdir(options.dir)
-        for fname in dirlist:
-            files.append(fname)
-        files.sort()
-        for file in files:
-            decision = handle_file(options.dir + file)
-            print decision + " : " + file
+        files = ifilter(os.path.isfile,
+                        map(lambda x: os.path.join(options.dir, x),
+                            os.listdir(os.path.expanduser(options.dir))))
+
+        for file in sorted(files):
+            result = handle_file(file)
+            print result + " : " + file
     else:
-        oParser.print_help()	
-        return
-                                
+        return oParser.print_help()
+
+
 if __name__ == '__main__':
     main()
